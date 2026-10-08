@@ -21,7 +21,7 @@ test('extraction service runs per-target async tasks', () => {
   assert.match(svc, /本次只提取场景/)
   assert.match(svc, /本次只提取道具/)
   // fire-and-forget 异步执行 extractor Agent
-  assert.match(svc, /mastra\.getAgent\('extractor'\)/)
+  assert.match(svc, /executeAgent\('extractor'/)
   assert.match(svc, /\.then\(\(result[^)]*\) => \{[\s\S]*status = 'done'/)
   assert.match(svc, /\.catch\(\(err/)
   // 逐步打印 Agent 进展（工具调用 + 文本），完成时打印汇总

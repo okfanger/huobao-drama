@@ -29,7 +29,7 @@ export function parseConfigTemperature(settingsRaw: string | null | undefined): 
 }
 
 export const officialProviders: Record<ServiceType, readonly string[]> = {
-  text: ['openai', 'gemini', 'volcengine'],
+  text: ['openai', 'gemini', 'volcengine', 'codex'],
   image: ['openai', 'gemini', 'volcengine'],
   video: ['volcengine', 'minimax', 'aliyun'],
 }

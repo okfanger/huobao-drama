@@ -4,11 +4,13 @@
  */
 import { eq } from 'drizzle-orm'
 import { db, schema } from '../db/index.js'
-import { mastra } from '../mastra/index.js'
+import { executeAgent } from '../agents/executor.js'
 import { buildAgentRequestContext } from '../agents/context.js'
 import { logTaskError, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
+import { createRun, finishRun, inRun } from './ai-runs.js'
 
 export interface VideoPromptBatchStatus {
+  run_id: string
   status: 'running' | 'done' | 'error'
   total: number
   completed: number
@@ -28,8 +30,8 @@ export async function startVideoPromptBatch(
   dramaId: number,
   opts: { model?: string; configId?: number } = {},
   storyboardIds?: number[],
-): Promise<{ started: boolean; total: number }> {
-  if (tasks.get(episodeId)?.status === 'running') return { started: false, total: -1 }
+): Promise<{ started: boolean; total: number; run_id?: string }> {
+  if (tasks.get(episodeId)?.status === 'running') return { started: false, total: -1, run_id: tasks.get(episodeId)?.run_id }
 
   const sbs = await db.select().from(schema.storyboards)
     .where(eq(schema.storyboards.episodeId, episodeId))
@@ -48,6 +50,7 @@ export async function startVideoPromptBatch(
   }
 
   const task: VideoPromptBatchStatus = {
+    run_id: createRun({ service_type: 'text', source: 'batch-video-prompts', episode_id: episodeId, drama_id: dramaId }),
     status: 'running',
     total: pending.length,
     completed: 0,
@@ -57,9 +60,7 @@ export async function startVideoPromptBatch(
   tasks.set(episodeId, task)
 
   logTaskStart('VideoPrompt', 'batch', { episodeId, dramaId, total: pending.length, model: opts.model || undefined })
-  ;(async () => {
-    const agent = mastra.getAgent('prompt_generator')
-    if (!agent) throw new Error('视频提示词 Agent 不可用')
+  ;inRun(task.run_id, async () => {
     const requestContext = buildAgentRequestContext({
       episodeId,
       dramaId,
@@ -70,11 +71,11 @@ export async function startVideoPromptBatch(
       task.current_storyboard_id = sb.id
       logTaskProgress('VideoPrompt', 'batch-shot', { episodeId, storyboardId: sb.id, index: task.completed + task.failed + 1, total: task.total })
       try {
-        await agent.generate([{
+        await executeAgent('prompt_generator', [{
           role: 'user',
           content: `请为分镜 #${sb.storyboardNumber}(ID:${sb.id})生成视频提示词(video_prompt)。视频模型:${videoLabel},请根据该模型的特性和时长限制生成。
 请先调用 read_storyboard_context 获取该分镜的画面描述(含【镜头N】子镜头与台词/旁白)、氛围及时长，据此生成 video_prompt(第一行是信息头：列出该分镜出场的人物与场景，用 @角色名/@场景名 引用；之后按 3 秒分段换行、用 @角色名/@场景名/@道具名 引用参考素材；段落内允许多镜头切镜，段与段可以是不同景别/角度/对象，但不跨场景，切镜点对齐分镜 description 的【镜头N】结构),然后调用 update_storyboard 保存到分镜 ID:${sb.id}。update_storyboard 参数只传 storyboard_id 和 video_prompt 两个键,不要回传该分镜的其他任何字段,不要重新拆分整集。`,
-        }], { maxSteps: 8, requestContext })
+        }], { maxSteps: 8, requestContext, targetId: sb.id })
         // 以实际落库为准判定成败
         const [fresh] = await db.select().from(schema.storyboards).where(eq(schema.storyboards.id, sb.id))
         if ((fresh?.videoPrompt || '').trim()) task.completed++
@@ -87,20 +88,22 @@ export async function startVideoPromptBatch(
         logTaskError('VideoPrompt', 'batch-shot', { storyboardId: sb.id, error: err?.message })
       }
     }
-  })()
+  })
     .then(() => {
       task.status = 'done'
+      finishRun(task.run_id, task.failed ? `${task.failed} prompts failed` : undefined)
       task.finished_at = new Date().toISOString()
       task.current_storyboard_id = undefined
       logTaskSuccess('VideoPrompt', 'batch', { episodeId, total: task.total, completed: task.completed, failed: task.failed })
     })
     .catch((err: any) => {
       task.status = 'error'
+      finishRun(task.run_id, err)
       task.finished_at = new Date().toISOString()
       task.error = err?.message || '批量生成失败'
       logTaskError('VideoPrompt', 'batch', { episodeId, error: err?.message })
     })
-  return { started: true, total: pending.length }
+  return { started: true, total: pending.length, run_id: task.run_id }
 }
 
 export function getVideoPromptBatchStatus(episodeId: number): VideoPromptBatchStatus | null {

@@ -7,6 +7,22 @@
 import type Database from 'better-sqlite3'
 
 export const sqliteSchemaStatements = [
+  `CREATE TABLE IF NOT EXISTS ai_runs (
+    id TEXT PRIMARY KEY, parent_id TEXT, drama_id INTEGER, episode_id INTEGER,
+    task_id INTEGER, target_id INTEGER, service_type TEXT NOT NULL, source TEXT NOT NULL,
+    provider TEXT, model TEXT, status TEXT NOT NULL DEFAULT 'running',
+    started_at TEXT NOT NULL, finished_at TEXT, error TEXT, result_url TEXT,
+    completion_requested TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_runs_episode ON ai_runs (episode_id, started_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_runs_parent ON ai_runs (parent_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_runs_task ON ai_runs (task_id)`,
+  `CREATE TABLE IF NOT EXISTS ai_run_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
+    type TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL,
+    FOREIGN KEY (run_id) REFERENCES ai_runs(id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_run_events_run ON ai_run_events (run_id, id)`,
   `CREATE TABLE IF NOT EXISTS dramas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,

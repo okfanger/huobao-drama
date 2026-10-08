@@ -22,7 +22,7 @@
         :title="`${o.model}${o.configName ? ` · ${o.configName}` : ''}`"
         @click="pick(o.key || o.model)"
       >
-        <span class="model-select-option-name">{{ o.model }}</span>
+        <span class="model-select-option-name">{{ displayModel(o) }}</span>
         <template v-if="modelIconUrl(o.provider, o.model)" #trailing>
           <img :src="modelIconUrl(o.provider, o.model)" class="model-select-icon sm" alt="" />
         </template>
@@ -51,9 +51,10 @@ const { t } = useI18n()
 
 const isOpen = ref(false)
 
-const effectiveDefaultLabel = computed(() => props.defaultLabel || t('common.default'))
+const effectiveDefaultLabel = computed(() => props.options[0]?.provider === 'codex' && props.options[0]?.model === 'default' ? `${t('common.default')} · ${t('codex.defaultModel')}` : props.defaultLabel || t('common.default'))
 const currentOption = computed(() => props.options.find(o => (o.key || o.model) === props.modelValue) || null)
-const currentLabel = computed(() => currentOption.value?.model || effectiveDefaultLabel.value)
+function displayModel(o) { return o?.provider === 'codex' && o?.model === 'default' ? t('codex.defaultModel') : o?.model }
+const currentLabel = computed(() => displayModel(currentOption.value) || effectiveDefaultLabel.value)
 // 默认 = 首个选项；未显式选模型时也展示默认模型的厂商图标（与 defaultLabel 取 options[0] 同口径）
 // 图标按模型名推断（网关 provider=openai 但模型实为 deepseek 等场景），回退 provider
 const defaultIcon = computed(() => modelIconUrl(props.options[0]?.provider, props.options[0]?.model))

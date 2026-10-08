@@ -6,6 +6,7 @@ import { resolvedTheme } from '~/composables/useTheme'
 
 const FILENAMES: Record<string, string> = {
   openai: 'openai.png',
+  codex: 'openai.png',
   gemini: 'gemini-color.png',
   volcengine: 'volcengine-color.png',
   minimax: 'minimax-color.png',

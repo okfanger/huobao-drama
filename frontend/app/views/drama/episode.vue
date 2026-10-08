@@ -990,20 +990,26 @@
 
       <!-- ===== TASK DRAWER ===== -->
       <div v-if="taskDrawer" class="task-drawer-overlay" @click.self="closeTaskDrawer">
-        <aside class="task-drawer" role="dialog" aria-modal="true" :aria-label="t('episode.tasks.title')">
+        <aside class="task-drawer" role="dialog" aria-modal="true" :aria-label="t('interactions.center')">
           <header class="task-drawer-head">
             <div>
-              <div class="video-task-title">{{ t('episode.tasks.title') }}</div>
-              <div class="video-task-meta">{{ t('episode.tasks.meta', { n: genTaskRows.length }) }}</div>
+              <div class="video-task-title">{{ t('interactions.center') }}</div>
+              <div v-if="taskDrawerTab === 'legacy'" class="video-task-meta">{{ t('episode.tasks.meta', { n: genTaskRows.length }) }}</div>
             </div>
             <div class="task-drawer-head-actions">
-              <button class="btn btn-sm" @click="loadGenTasks">
+              <button v-if="taskDrawerTab === 'legacy'" class="btn btn-sm" @click="loadGenTasks">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                 {{ t('common.refresh') }}
               </button>
               <button class="btn btn-ghost btn-icon" @click="closeTaskDrawer"><X :size="14" /></button>
             </div>
           </header>
+          <div class="task-process-tabs" style="display:flex;gap:8px;padding:10px 16px">
+            <button class="btn btn-sm" :class="{ 'btn-primary': taskDrawerTab === 'interactions' }" @click="taskDrawerTab = 'interactions'">{{ t('interactions.title') }}</button>
+            <button class="btn btn-sm" :class="{ 'btn-primary': taskDrawerTab === 'legacy' }" @click="taskDrawerTab = 'legacy'">{{ t('interactions.legacy') }}</button>
+          </div>
+          <InteractionTimeline v-if="taskDrawerTab === 'interactions'" :key="selectedRunId || epId" :episode-id="Number(epId)" :initial-run-id="selectedRunId" />
+          <template v-else>
           <div class="video-task-metrics task-drawer-metrics">
             <span class="video-task-metric is-pending">{{ t('episode.vid.metricPending', { n: genTaskActiveCount }) }}</span>
             <span class="video-task-metric is-done">{{ t('episode.vid.metricDone', { n: genTaskDoneCount }) }}</span>
@@ -1057,6 +1063,8 @@
                   </template>
                   <span class="video-task-sep">·</span>
                   <span>#{{ row.id }}</span>
+                  <button v-if="row.runId" class="btn btn-ghost btn-sm" @click="selectedRunId = row.runId; taskDrawerTab = 'interactions'">{{ t('interactions.view') }}</button>
+                  <span v-else>{{ t('interactions.noHistory') }}</span>
                 </div>
                 <div v-if="row.errorMsg" class="video-task-error" :title="row.errorMsg">
                   {{ mapError(row.errorMsg) }}
@@ -1069,6 +1077,7 @@
               </span>
             </div>
           </div>
+          </template>
         </aside>
       </div>
 
@@ -1603,6 +1612,8 @@ const failedVideoMessages = ref({})
 const genTasks = ref([])
 const genMerges = ref([])
 const taskDrawer = ref(false)
+const taskDrawerTab = ref('interactions')
+const selectedRunId = ref('')
 let genTasksTimer = null
 
 function openTaskDrawer() {
@@ -1610,6 +1621,7 @@ function openTaskDrawer() {
   loadGenTasks()
 }
 function closeTaskDrawer() {
+  selectedRunId.value = ''
   taskDrawer.value = false
 }
 const imageViewer = ref({ open: false, src: '', title: '' })
@@ -2270,6 +2282,7 @@ function genTaskTargetLabel(task) {
 const genTaskRows = computed(() => {
   const taskRows = genTasks.value.map(t => ({
     key: `task-${t.id}`,
+    runId: t.run_id,
     kind: t.type, // image | video
     id: t.id,
     targetLabel: genTaskTargetLabel(t),
@@ -2284,6 +2297,7 @@ const genTaskRows = computed(() => {
   }))
   const mergeRows = genMerges.value.map(m => ({
     key: `merge-${m.id}`,
+    runId: null,
     kind: 'merge',
     id: m.id,
     targetLabel: t('episode.tasks.fullMerge'),

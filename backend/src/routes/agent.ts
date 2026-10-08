@@ -4,7 +4,8 @@
 import { Hono } from 'hono'
 import { validAgentTypes } from '../agents/index.js'
 import { buildAgentRequestContext } from '../agents/context.js'
-import { mastra } from '../mastra/index.js'
+import { executeAgent } from '../agents/executor.js'
+import { createRun } from '../services/ai-runs.js'
 import { success, badRequest } from '../utils/response.js'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 
@@ -50,12 +51,6 @@ app.post('/:type/chat', async (c) => {
     return badRequest(c, '需要 drama_id 与 episode_id')
   }
 
-  const agent = mastra.getAgent(agentType)
-  if (!agent) {
-    logTaskError('Agent', agentType, { reason: 'agent not found' })
-    return badRequest(c, 'Agent 不存在')
-  }
-
   const requestContext = buildAgentRequestContext({
     episodeId: episode_id,
     dramaId: drama_id,
@@ -64,11 +59,12 @@ app.post('/:type/chat', async (c) => {
   })
 
   const startTime = performance.now()
+  const runId = createRun({ service_type: 'text', source: agentType, drama_id, episode_id })
 
   try {
-    const result = await agent.generate(
+    const result = await executeAgent(agentType,
       [{ role: 'user', content: message }],
-      { maxSteps: 20, requestContext },
+      { maxSteps: 20, requestContext, runId },
     )
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1)
@@ -95,6 +91,7 @@ app.post('/:type/chat', async (c) => {
 
     return success(c, {
       type: 'done',
+      run_id: result.run_id,
       text: result.text || '',
       toolCalls: normalizedToolCalls,
       toolResults: normalizedToolResults,
@@ -103,7 +100,7 @@ app.post('/:type/chat', async (c) => {
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1)
     logTaskError('Agent', agentType, { elapsedSeconds: elapsed, error: err.message })
     console.error(err.stack || err)
-    return badRequest(c, err.message || 'Agent 执行失败')
+    return c.json({ code: 400, message: err.message || 'Agent 执行失败', run_id: runId, data: { run_id: runId } }, 400)
   }
 })
 

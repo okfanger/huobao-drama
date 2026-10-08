@@ -39,8 +39,8 @@ export default defineNuxtConfig({
   vite: {
     server: {
       proxy: {
-        '/api': { target: 'http://localhost:5679', changeOrigin: true },
-        '/static': { target: 'http://localhost:5679', changeOrigin: true },
+        '/api': { target: process.env.HUOBAO_API_PROXY || 'http://localhost:5679', changeOrigin: true },
+        '/static': { target: process.env.HUOBAO_API_PROXY || 'http://localhost:5679', changeOrigin: true },
       },
     },
   },

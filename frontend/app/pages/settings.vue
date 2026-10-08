@@ -119,7 +119,7 @@
                 </span>
                 <span class="hqm-models mono">
                   <span v-for="(m, i) in q.model" :key="m" :class="['hqm-model', { 'is-default': i === 0 }]">
-                    {{ m }}<em v-if="i === 0">{{ t('common.default') }}</em>
+                    {{ cfgForm.provider === 'codex' && m === 'default' ? t('codex.defaultModel') : m }}<em v-if="i === 0">{{ t('common.default') }}</em>
                   </span>
                 </span>
               </div>
@@ -161,7 +161,8 @@
                 <div class="config-main">
                   <div class="config-line">
                     <span class="config-name">{{ c.name || `${c.provider}-${c.service_type}` }}</span>
-                    <span :class="['tag', c.api_key ? 'tag-success' : 'tag-error']">{{ c.api_key ? t('settings.ai.hasKey') : t('settings.ai.noKey') }}</span>
+                    <span v-if="c.provider === 'codex'" class="tag">{{ t('codex.localLogin') }}</span>
+                    <span v-else :class="['tag', c.api_key ? 'tag-success' : 'tag-error']">{{ c.api_key ? t('settings.ai.hasKey') : t('settings.ai.noKey') }}</span>
                     <span v-if="!c.is_active" class="tag">{{ t('settings.common.disabled') }}</span>
                   </div>
                   <div class="config-models">
@@ -172,10 +173,10 @@
                       @click="setDefaultModel(st.type, c, m)"
                     >
                       <Star v-if="isDefaultModel(st.type, c, m)" :size="9" class="cfg-model-star" />
-                      {{ m }}
+                      {{ c.provider === 'codex' && m === 'default' ? t('codex.defaultModel') : m }}
                     </button>
                   </div>
-                  <div class="config-sub mono truncate">{{ c.base_url || t('settings.ai.noBaseUrl') }}</div>
+                  <div class="config-sub mono truncate">{{ c.provider === 'codex' ? t('codex.localHint') : c.base_url || t('settings.ai.noBaseUrl') }}</div>
                 </div>
                 <button v-if="st.type === 'text'" class="btn btn-ghost btn-sm" @click="testExistingCfg(c)">{{ t('settings.ai.test') }}</button>
                 <label class="config-switch">
@@ -510,15 +511,16 @@
             <input v-model="cfgForm.name" class="input" :placeholder="t('settings.cfg.namePlaceholder')" />
           </label>
           <label class="field"><span class="field-label">{{ t('settings.cfg.provider') }}</span>
-            <BaseSelect v-model="cfgForm.provider" :options="providerSelectOptions" :placeholder="t('settings.cfg.providerPlaceholder')" searchable />
+            <BaseSelect v-model="cfgForm.provider" :options="providerSelectOptions" :placeholder="t('settings.cfg.providerPlaceholder')" searchable @update:model-value="onProviderChange" />
           </label>
           <label class="field">
             <span class="field-label">{{ t('settings.cfg.priority') }}</span>
             <input v-model.number="cfgForm.priority" class="input" type="number" min="0" max="999" />
             <span class="field-hint">{{ t('settings.cfg.priorityHint') }}</span>
           </label>
-          <label class="field"><span class="field-label">API Key</span><input v-model="cfgForm.api_key" class="input" type="password" placeholder="sk-..." /></label>
-          <label class="field"><span class="field-label">Base URL</span><input v-model="cfgForm.base_url" class="input" placeholder="https://..." /></label>
+          <label v-if="cfgForm.provider !== 'codex'" class="field"><span class="field-label">API Key</span><input v-model="cfgForm.api_key" class="input" type="password" placeholder="sk-..." /></label>
+          <label v-if="cfgForm.provider !== 'codex'" class="field"><span class="field-label">Base URL</span><input v-model="cfgForm.base_url" class="input" placeholder="https://..." /></label>
+          <p v-if="cfgForm.provider === 'codex'" class="field-hint">{{ t('codex.localHint') }}</p>
           <div class="field">
             <span class="field-label">{{ t('settings.cfg.models') }}</span>
             <div v-if="cfgForm.models.length" class="model-chips">
@@ -528,7 +530,7 @@
                 :title="t('settings.cfg.modelChipHint')"
                 @click="pinModelTop(i)"
               >
-                {{ m }}<em v-if="i === 0">{{ t('common.default') }}</em>
+                {{ cfgForm.provider === 'codex' && m === 'default' ? t('codex.defaultModel') : m }}<em v-if="i === 0">{{ t('common.default') }}</em>
                 <button type="button" class="model-chip-x" :title="t('common.delete')" @click.stop="removeModel(i)"><X :size="11" /></button>
               </span>
             </div>
@@ -542,7 +544,7 @@
             </div>
             <span class="field-hint">{{ t('settings.cfg.modelsHint') }}</span>
           </div>
-          <label v-if="cfgForm.service_type === 'text'" class="field">
+          <label v-if="cfgForm.service_type === 'text' && cfgForm.provider !== 'codex'" class="field">
             <span class="field-label">Temperature <span class="dim">({{ t('settings.cfg.tempHint') }})</span></span>
             <input v-model="cfgForm.temperature" class="input" type="number" step="0.1" min="0" max="2" :placeholder="t('settings.cfg.tempPlaceholder')" />
             <span class="field-hint">{{ t('settings.cfg.tempNote') }}</span>
@@ -750,16 +752,19 @@ const serviceTypes = computed(() => [
   { type: 'video', label: t('common.serviceType.video') },
 ])
 const providers = ['gemini', 'openai', 'volcengine', 'minimax', 'aliyun']
-const providerSelectOptions = computed(() => providers.map(p => ({ label: p, value: p })))
+const providerSelectOptions = computed(() => [...providers, ...(cfgForm.service_type === 'text' ? ['codex'] : [])].map(p => ({ label: p, value: p })))
 const serviceMeta = computed(() => ({
   text: { label: t('common.serviceType.text'), desc: t('settings.ai.meta.text') },
   image: { label: t('common.serviceType.image'), desc: t('settings.ai.meta.image') },
   video: { label: t('common.serviceType.video'), desc: t('settings.ai.meta.video') },
 }))
+watch(() => cfgForm.provider, provider => { if (provider === 'codex') { cfgForm.api_key = ''; cfgForm.base_url = ''; cfgForm.temperature = ''; if (!cfgForm.models.length) cfgForm.models = ['default'] } })
+function onProviderChange(provider) { if (provider === 'codex') cfgForm.models = ['default'] }
 const providerPresets = {
   text: {
     gemini: { label: 'Gemini 官方', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview'] },
     openai: { label: 'OpenAI 官方', baseUrl: 'https://api.openai.com', models: ['deepseek-v4-pro', 'gpt-5.6-terra'] },
+    codex: { label: 'Codex (ChatGPT)', baseUrl: '', models: ['default'] },
   },
   image: {
     gemini: { label: 'Gemini 官方', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3-pro-image', 'gemini-3.1-flash-image'] },
@@ -786,7 +791,7 @@ const huobaoQuickConfigs = computed(() => {
 
 function byType(t) { return cfgs.value.filter(c => c.service_type === t) }
 function countActive(t) { return byType(t).filter(c => c.is_active).length }
-function fmtModel(m) { return Array.isArray(m) ? m.join(', ') : m || '—' }
+function fmtModel(m) { return Array.isArray(m) ? m.map(v => v === 'default' ? t('codex.defaultModel') : v).join(', ') : m || '—' }
 function presetsByType(type) {
   const group = providerPresets[type] || {}
   return Object.entries(group).map(([provider, preset]) => ({ provider, ...preset }))
@@ -913,7 +918,8 @@ async function testExistingCfg(c) {
 }
 async function saveCfg() {
   if (!cfgForm.provider) { toast.warning(t('settings.cfg.providerRequired')); return }
-  const models = [...cfgForm.models]
+  const models = cfgForm.provider === 'codex' && !cfgForm.models.length ? ['default'] : [...cfgForm.models]
+  if (cfgForm.provider === 'codex') { cfgForm.api_key = ''; cfgForm.base_url = ''; cfgForm.temperature = '' }
   const temperature = cfgForm.temperature === '' || cfgForm.temperature === null ? null : Number(cfgForm.temperature)
   if (temperature !== null && (!Number.isFinite(temperature) || temperature < 0 || temperature > 2)) {
     toast.warning(t('settings.cfg.tempInvalid')); return

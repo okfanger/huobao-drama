@@ -11,6 +11,8 @@ import { extractVideoPoster } from '../utils/video-poster.js'
 import { getImageAdapter, getVideoAdapter } from './adapters/registry'
 import type { AIConfig } from './adapters/types'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
+import { createRun, inRun, traceEvent, currentRunId, finishRun, updateRun } from './ai-runs.js'
+import { tracedFetch } from './traced-fetch.js'
 
 type TaskType = 'image' | 'video'
 
@@ -172,7 +174,24 @@ async function createTask(
   })
 
   const id = getInsertId(res)
-  processTask(id, config).catch(err => {
+  let episodeId: number | undefined
+  let dramaId = fields.dramaId
+  if (fields.storyboardId) {
+    const [sb] = await db.select().from(schema.storyboards).where(eq(schema.storyboards.id, fields.storyboardId))
+    episodeId = sb?.episodeId
+    if (episodeId && !dramaId) {
+      const [ep] = await db.select().from(schema.episodes).where(eq(schema.episodes.id, episodeId))
+      dramaId = ep?.dramaId
+    }
+  }
+  const runId = createRun({ service_type: type, source: `${type}-generation`, task_id: id,
+    drama_id: dramaId, episode_id: episodeId, target_id: fields.storyboardId || fields.characterId || fields.sceneId || fields.propId,
+    provider: config.provider, model: fields.model || config.model })
+  inRun(runId, () => {
+    traceEvent('media-submit', { task_id: id, ...fields, params })
+    return processTask(id, config)
+  }).catch(err => {
+    finishRun(runId, err)
     logTaskError(taskLabel(type), 'process', { id, error: err.message })
     console.error(`${taskLabel(type)} ${id} failed:`, err)
   })
@@ -264,7 +283,7 @@ async function processTask(id: number, config: AIConfig) {
       body: isMultipart ? `[multipart/form-data: ${[...(body as FormData).keys()].join(', ')}]` : body,
     })
 
-    const resp = await fetch(url, {
+    const resp = await tracedFetch(url, {
       method,
       headers,
       body: isMultipart ? (body as FormData) : JSON.stringify(body),
@@ -318,6 +337,7 @@ async function processTask(id: number, config: AIConfig) {
 }
 
 async function markPolling(id: number, taskId: string | undefined) {
+  traceEvent('provider-wait', { task_id: id, provider_task_id: taskId })
   await db.update(schema.sysTask)
     .set({ taskId, status: 'processing', updatedAt: now() })
     .where(eq(schema.sysTask.id, id))
@@ -325,10 +345,12 @@ async function markPolling(id: number, taskId: string | undefined) {
 }
 
 async function failTask(id: number, message: string) {
+  const runId = currentRunId()
   logTaskError('SysTask', 'failed', { id, error: message })
   await db.update(schema.sysTask)
     .set({ status: 'failed', errorMsg: message, updatedAt: now() })
     .where(eq(schema.sysTask.id, id))
+  if (runId) finishRun(runId, message)
 }
 
 type SysTaskRecord = typeof schema.sysTask.$inferSelect
@@ -359,7 +381,8 @@ async function pollTask(record: SysTaskRecord, config: AIConfig, taskId: string)
       const remainingMs = profile.maxDurationMs
         ? Math.max(1_000, profile.maxDurationMs - (Date.now() - startedAt))
         : 600_000
-      const resp = await fetch(url, {
+      traceEvent('provider-wait', { task_id: record.id, provider_task_id: taskId, attempt: i + 1 })
+      const resp = await tracedFetch(url, {
         method,
         headers,
         signal: AbortSignal.timeout(remainingMs),
@@ -405,12 +428,14 @@ async function pollTask(record: SysTaskRecord, config: AIConfig, taskId: string)
         return
       }
       logTaskWarn(label, 'poll-retry', { id: record.id, taskId, attempt: i + 1, error: err.message })
+      traceEvent('poll-error', { attempt: i + 1, error: err })
     }
   }
   await failTask(record.id, 'Timeout: polling attempts exhausted')
 }
 
 async function handleImageComplete(record: SysTaskRecord, imageUrl: string) {
+  traceEvent('download-start', { url: imageUrl, status: 'started' })
   const localPath = await downloadFile(imageUrl, 'images')
   // 列表页缩略图（前端按命名约定推导地址，失败不影响主流程）
   await generateImageThumb(localPath)
@@ -422,9 +447,11 @@ async function handleImageComplete(record: SysTaskRecord, imageUrl: string) {
   logTaskSuccess('ImageTask', 'downloaded', { id: record.id, provider: record.provider, localPath })
 
   await writeBackImageAssets(record, localPath)
+  completeMediaRun(localPath)
 }
 
 async function handleImageCompleteBase64(record: SysTaskRecord, base64Data: string, mimeType: string) {
+  traceEvent('download-start', { mime_type: mimeType, status: 'saving' })
   const localPath = await saveBase64Image(base64Data, mimeType, 'images')
   await generateImageThumb(localPath)
 
@@ -435,6 +462,7 @@ async function handleImageCompleteBase64(record: SysTaskRecord, base64Data: stri
   logTaskSuccess('ImageTask', 'saved-base64', { id: record.id, provider: record.provider, mimeType, localPath })
 
   await writeBackImageAssets(record, localPath)
+  completeMediaRun(localPath)
 }
 
 // 图片完成后回写业务表：分镜(按 frameType)、角色、场景、道具
@@ -459,6 +487,7 @@ async function writeBackImageAssets(record: SysTaskRecord, localPath: string) {
 }
 
 async function handleVideoComplete(record: SysTaskRecord, videoUrl: string, duration: number | null | undefined) {
+  traceEvent('download-start', { url: videoUrl, status: 'started' })
   const localPath = await downloadFile(videoUrl, 'videos')
   // 海报帧供列表/封面展示，避免前端为显示首帧缓冲整个视频
   await extractVideoPoster(localPath)
@@ -473,6 +502,16 @@ async function handleVideoComplete(record: SysTaskRecord, videoUrl: string, dura
       .set({ videoUrl: localPath, duration: duration || undefined, updatedAt: now() })
       .where(eq(schema.storyboards.id, record.storyboardId))
   }
+  completeMediaRun(localPath)
+}
+
+function completeMediaRun(localPath: string) {
+  const runId = currentRunId()
+  if (!runId) return
+  updateRun(runId, { result_url: localPath })
+  traceEvent('download-end', { result_url: localPath })
+  traceEvent('result', { result_url: localPath, saved: true })
+  finishRun(runId)
 }
 
 // ─── 参考素材归一化 ───────────────────────────────────────────────

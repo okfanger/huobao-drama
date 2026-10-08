@@ -6,6 +6,7 @@ import { generateImage, generateVideo } from '../services/generation.js'
 import { getActiveConfig, getConfigById } from '../services/ai.js'
 import { getDramaStylePrompt } from '../services/style-preset.js'
 import { logTaskError, logTaskPayload, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
+import { taskRunId } from '../services/ai-runs.js'
 
 const app = new Hono()
 
@@ -211,7 +212,7 @@ app.get('/:id', async (c) => {
   const id = Number(c.req.param('id'))
   const [row] = await db.select().from(schema.sysTask)
     .where(eq(schema.sysTask.id, id))
-  return success(c, row || null)
+  return success(c, row ? { ...row, run_id: taskRunId(id) } : null)
 })
 
 // GET /tasks — 按 type / storyboard_id / drama_id 过滤
@@ -226,7 +227,7 @@ app.get('/', async (c) => {
   if (storyboardId) rows = rows.filter(r => r.storyboardId === Number(storyboardId))
   if (dramaId) rows = rows.filter(r => r.dramaId === Number(dramaId))
 
-  return success(c, rows)
+  return success(c, rows.map(row => ({ ...row, run_id: taskRunId(row.id) })))
 })
 
 // DELETE /tasks/:id

@@ -28,6 +28,9 @@ import { db, schema } from './db/index.js'
 import { eq } from 'drizzle-orm'
 import { now } from './utils/response.js'
 import { DATA_ROOT } from './utils/paths.js'
+import aiRuns from './routes/aiRuns.js'
+import { startRunMaintenance } from './services/ai-runs.js'
+import { interactionMiddleware } from './middleware/interaction.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(__dirname, '../..')
@@ -41,6 +44,8 @@ app.use('*', cors({
 }))
 app.use('*', requestLogger)
 app.use('*', errorHandler)
+app.use('/api/v1/*', interactionMiddleware)
+startRunMaintenance()
 
 // Health check（version 供部署巡检/更新检查核对当前运行版本）
 app.get('/api/v1/health', (c) => c.json({
@@ -51,6 +56,7 @@ app.get('/api/v1/health', (c) => c.json({
 
 // API routes
 const api = new Hono()
+api.route('/ai-runs', aiRuns)
 api.route('/dramas', dramas)
 api.route('/episodes', episodes)
 api.route('/storyboards', storyboards)

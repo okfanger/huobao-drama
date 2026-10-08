@@ -18,6 +18,8 @@ import { loadAgentSkills, skillWorkspaces } from './skills.js'
 import { loadAgentPromptFile, loadBasePromptFile } from './prompts.js'
 import { buildLanguageDirective } from './language.js'
 import { getContentLanguageFromRC } from './context.js'
+import { tracedFetch } from '../services/traced-fetch.js'
+import { currentRunId, updateRun } from '../services/ai-runs.js'
 
 // Default prompts (used when workspace/prompts/<type>.md 文件缺失时兜底)
 export const DEFAULT_PROMPTS: Record<string, { name: string; instructions: string }> = {
@@ -218,7 +220,7 @@ function createThinkingOffFetch(providerName: string, baseURL: string): typeof f
         }
       }
     } catch { /* 解析失败则原样透传 */ }
-    return fetch(input, init)
+    return tracedFetch(input, init)
   }
 }
 
@@ -231,7 +233,7 @@ function createThinkingOffFetch(providerName: string, baseURL: string): typeof f
  * inner 传 thinking-off fetch 时可链式叠加两个补丁。
  */
 function createTemperatureFetch(providerName: string, temperature: number, inner?: typeof fetch): typeof fetch {
-  const base = inner || fetch
+  const base = inner || tracedFetch
   return async (input: any, init?: any) => {
     try {
       if (init?.body && typeof init.body === 'string') {
@@ -271,7 +273,7 @@ function isOfficialOpenAIHost(baseURL: string) {
 }
 
 function createMaxTokensFetch(providerName: string, inner?: typeof fetch): typeof fetch {
-  const base = inner || fetch
+  const base = inner || tracedFetch
   return async (input: any, init?: any) => {
     try {
       if (init?.body && typeof init.body === 'string') {
@@ -296,6 +298,8 @@ async function getModel(fileModel: string | undefined, modelOverride?: string, t
   const textConfig = (textConfigId ? await getConfigById(textConfigId) : null) || await getTextConfig()
   const modelName = modelOverride || fileModel || textConfig.model
   const providerName = textConfig.provider.toLowerCase()
+  const runId = currentRunId()
+  if (runId) updateRun(runId, { provider: providerName, model: modelName })
   const resolvedBaseURL = getTextProviderBaseUrl(textConfig)
   const temperature = textConfig.temperature ?? null
   const endpointKey = `${providerName}|${resolvedBaseURL}|${modelName}|t=${temperature ?? 'default'}`
@@ -322,7 +326,7 @@ async function getModel(fileModel: string | undefined, modelOverride?: string, t
     const googleProvider = createGoogleGenerativeAI({
       apiKey: textConfig.apiKey,
       baseURL: resolvedBaseURL,
-      fetch: fetchImpl,
+      fetch: fetchImpl || tracedFetch,
     })
     return googleProvider(modelName)
   }
@@ -330,12 +334,12 @@ async function getModel(fileModel: string | undefined, modelOverride?: string, t
   const provider = createOpenAI({
     baseURL: resolvedBaseURL,
     apiKey: textConfig.apiKey,
-    fetch: fetchImpl,
+    fetch: fetchImpl || tracedFetch,
   } as any)
   return provider.chat(modelName)
 }
 
-const AGENT_TOOLS: Record<string, Record<string, any>> = {
+export const AGENT_TOOLS: Record<string, Record<string, any>> = {
   script_rewriter: scriptTools,
   extractor: extractTools,
   storyboard_breaker: storyboardTools,
@@ -348,7 +352,7 @@ const AGENT_TOOLS: Record<string, Record<string, any>> = {
 
 /** instructions 按请求解析：prompt 文件（或默认）+ 技能全文拼接 + 目标语言指令块
  *  prompt/skill 文本随内容语言切换语言变体（<type>.<lang>.md / SKILL.<lang>.md），缺失回退中文版 */
-function buildInstructions(type: string) {
+export function buildInstructions(type: string) {
   return async ({ requestContext }: { requestContext?: RequestContext }) => {
     const defaults = DEFAULT_PROMPTS[type]
     const lang = getContentLanguageFromRC(requestContext)
@@ -360,6 +364,14 @@ function buildInstructions(type: string) {
       .filter(Boolean)
       .join('\n\n')
   }
+}
+
+export async function resolveAgentConfig(type: string, requestContext?: RequestContext) {
+  const configId = requestContext?.get('textConfigId' as never) as number | undefined
+  const config = (configId ? await getConfigById(configId) : null) || await getTextConfig()
+  const prompt = await loadBasePromptFile(type)
+  const model = requestContext?.get('modelOverride' as never) as string | undefined
+  return { config, model: model || prompt?.model || config.model }
 }
 
 /** model 按请求解析：基础版 prompt 文件 frontmatter + RequestContext 的 modelOverride/textConfigId 覆盖

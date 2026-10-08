@@ -3,14 +3,16 @@
  * 角色 / 场景 / 道具 可分别单独提取，同一集的不同类型可并行
  * 任务状态为进程内内存态：后端重启后运行中的任务状态丢失（Agent 调用本身已被中断）
  */
-import { mastra } from '../mastra/index.js'
+import { executeAgent } from '../agents/executor.js'
 import { buildAgentRequestContext } from '../agents/context.js'
 import { logTaskError, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
+import { createRun, finishRun } from './ai-runs.js'
 
 export type ExtractTarget = 'characters' | 'scenes' | 'props'
 export const EXTRACT_TARGETS: ExtractTarget[] = ['characters', 'scenes', 'props']
 
 export interface ExtractTask {
+  run_id: string
   status: 'running' | 'done' | 'error'
   started_at: string
   finished_at?: string
@@ -32,21 +34,20 @@ export function startExtraction(episodeId: number, dramaId: number, target: Extr
   const key = keyOf(episodeId, target)
   if (tasks.get(key)?.status === 'running') return false
 
-  const task: ExtractTask = { status: 'running', started_at: new Date().toISOString() }
+  const task: ExtractTask = { status: 'running', started_at: new Date().toISOString(), run_id: createRun({ service_type: 'text', source: `extract-${target}`, episode_id: episodeId, drama_id: dramaId }) }
   tasks.set(key, task)
 
   logTaskStart('Extract', target, { episodeId, dramaId, model: opts.model || undefined, configId: opts.configId || undefined })
   ;(async () => {
-    const agent = mastra.getAgent('extractor')
-    if (!agent) throw new Error('提取 Agent 不可用')
     const requestContext = buildAgentRequestContext({
       episodeId,
       dramaId,
       modelOverride: opts.model || undefined,
       textConfigId: opts.configId || undefined,
     })
-    return agent.generate([{ role: 'user', content: EXTRACT_MESSAGES[target] }], {
+    return executeAgent('extractor', [{ role: 'user', content: EXTRACT_MESSAGES[target] }], {
       maxSteps: 20,
+      runId: task.run_id,
       requestContext,
       // 逐步打印 Agent 进展：调用了哪些工具、输出了什么
       onStepFinish: (step: any) => {
@@ -73,6 +74,7 @@ export function startExtraction(episodeId: number, dramaId: number, target: Extr
       })
     })
     .catch((err: any) => {
+      finishRun(task.run_id, err)
       task.status = 'error'
       task.finished_at = new Date().toISOString()
       task.error = err?.message || '提取失败'

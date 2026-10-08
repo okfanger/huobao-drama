@@ -6,8 +6,10 @@ import { toSnakeCase } from '../utils/transform.js'
 import { joinProviderUrl } from '../services/adapters/url.js'
 import { isOfficialProvider, parseConfigTemperature } from '../services/ai.js'
 import { redactUrl, logTaskError, logTaskProgress, logTaskSuccess } from '../utils/task-logger.js'
+import { codexStatus } from '../services/codex-status.js'
 
 const app = new Hono()
+app.get('/codex/status', async c => success(c, await codexStatus()))
 
 /** 归一化 temperature 入参：null=未设置；合法值 0~2；非法抛错 */
 function normalizeTemperature(v: any): number | null {
@@ -128,6 +130,11 @@ app.get('/', async (c) => {
 // POST /ai-configs
 app.post('/', async (c) => {
   const body = await c.req.json()
+  if (typeof body.provider === 'string') body.provider = body.provider.toLowerCase()
+  if (body.provider === 'codex') {
+    body.api_key = ''; body.base_url = ''; body.temperature = null
+    if (!body.model?.length) body.model = ['default']
+  }
   const ts = now()
 
   // 验证必填字段
@@ -170,6 +177,15 @@ app.post('/', async (c) => {
 // POST /ai-configs/test
 app.post('/test', async (c) => {
   const body = await c.req.json()
+  if (typeof body.provider === 'string') body.provider = body.provider.toLowerCase()
+  if (body.provider === 'codex') {
+    body.api_key = ''; body.base_url = ''; body.temperature = null
+    if (!body.model?.length) body.model = ['default']
+  }
+  if (body.provider === 'codex' && body.service_type === 'text') {
+    const status = await codexStatus()
+    return success(c, { ...status, reachable: status.logged_in, status: status.logged_in ? 'READY' : 'UNAVAILABLE', message: status.message || status.version, method: 'CLI', url: 'Codex (localhost)' })
+  }
   if (!body.service_type || !body.provider || !body.base_url) {
     return badRequest(c, '需要 service_type、provider 与 base_url')
   }
@@ -251,11 +267,17 @@ app.get('/:id', async (c) => {
 app.put('/:id', async (c) => {
   const id = Number(c.req.param('id'))
   const body = await c.req.json()
+  if (typeof body.provider === 'string') body.provider = body.provider.toLowerCase()
+  if (body.provider === 'codex') {
+    body.api_key = ''; body.base_url = ''; body.temperature = null
+    if (!body.model?.length) body.model = ['default']
+  }
   const [existing] = await db.select().from(schema.aiServiceConfigs).where(eq(schema.aiServiceConfigs.id, id))
   if (!existing) return notFound(c)
 
   const serviceType = 'service_type' in body ? body.service_type : existing.serviceType
   const provider = 'provider' in body ? body.provider : existing.provider
+  if (provider === 'codex') { body.api_key = ''; body.base_url = ''; body.temperature = null; if ('model' in body && !body.model?.length) body.model = ['default'] }
   if (!isOfficialProvider(serviceType, provider)) {
     return badRequest(c, '不支持的 service_type/provider')
   }

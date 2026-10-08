@@ -1,3 +1,4 @@
+import { taskRunId } from '../services/ai-runs.js'
 import { Hono } from 'hono'
 import { and, eq, isNull } from 'drizzle-orm'
 import { db, getInsertId, schema } from '../db/index.js'
@@ -134,7 +135,7 @@ app.post('/:id/extract', async (c) => {
   const [ep] = await db.select().from(schema.episodes).where(eq(schema.episodes.id, id))
   if (!ep) return notFound(c, '剧集不存在')
   const started = startExtraction(ep.id, ep.dramaId, target, { model: body.model || undefined, configId: body.config_id ?? undefined })
-  return success(c, { target, status: 'running', already_running: !started })
+  return success(c, { target, status: 'running', already_running: !started, run_id: getExtractionStatus(id)[target]?.run_id })
 })
 
 // GET /episodes/:id/extract-status — 查询三类资产提取任务状态
@@ -153,9 +154,9 @@ app.post('/:id/generate-video-prompts', async (c) => {
     ? body.storyboard_ids.map(Number).filter((n: number) => Number.isInteger(n) && n > 0)
     : undefined
   const result = await startVideoPromptBatch(ep.id, ep.dramaId, { model: body.model || undefined, configId: body.config_id ?? undefined }, storyboardIds)
-  if (result.total === -1) return success(c, { status: 'running', already_running: true })
+  if (result.total === -1) return success(c, { status: 'running', already_running: true, run_id: result.run_id })
   if (!result.started) return success(c, { status: 'idle', total: 0 })
-  return success(c, { status: 'running', total: result.total })
+  return success(c, { status: 'running', total: result.total, run_id: result.run_id })
 })
 
 // GET /episodes/:id/video-prompts-status — 查询批量视频提示词任务状态
@@ -251,7 +252,7 @@ app.get('/:id/generation-tasks', async (c) => {
     .slice(0, 20)
 
   return success(c, {
-    tasks: toSnakeCaseArray(tasks),
+    tasks: toSnakeCaseArray(tasks).map((task: any) => ({ ...task, run_id: taskRunId(task.id) })),
     merges: toSnakeCaseArray(merges),
   })
 })
