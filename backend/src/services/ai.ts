@@ -5,6 +5,7 @@ import { db, schema } from '../db/index.js'
 import { eq } from 'drizzle-orm'
 import { logTaskProgress, logTaskWarn } from '../utils/task-logger.js'
 import { joinProviderUrl } from './adapters/url.js'
+import { getAutoDLBaseUrl } from './adapters/autodl.js'
 
 export type ServiceType = 'text' | 'image' | 'video'
 
@@ -29,9 +30,9 @@ export function parseConfigTemperature(settingsRaw: string | null | undefined): 
 }
 
 export const officialProviders: Record<ServiceType, readonly string[]> = {
-  text: ['openai', 'gemini', 'volcengine', 'codex'],
-  image: ['openai', 'gemini', 'volcengine'],
-  video: ['volcengine', 'minimax', 'aliyun'],
+  text: ['openai', 'gemini', 'volcengine', 'codex', 'autodl'],
+  image: ['openai', 'gemini', 'volcengine', 'autodl'],
+  video: ['volcengine', 'minimax', 'aliyun', 'autodl'],
 }
 
 export function isOfficialProvider(serviceType?: string | null, provider?: string | null): boolean {
@@ -41,6 +42,8 @@ export function isOfficialProvider(serviceType?: string | null, provider?: strin
 
 export function getTextProviderBaseUrl(config: AIConfig) {
   const provider = config.provider.toLowerCase()
+
+  if (provider === 'autodl') return getAutoDLBaseUrl(config.baseUrl)
 
   if (provider === 'openai') {
     return joinProviderUrl(config.baseUrl, '/v1', '')

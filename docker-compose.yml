@@ -32,6 +32,9 @@ services:
 
   watchtower:
     image: containrrr/watchtower:latest
+    environment:
+      # Docker Engine 29 最低接受 API 1.40，老版 watchtower 默认 1.25 会被拒
+      DOCKER_API_VERSION: "1.44"
     command: >
       --http-api-update
       --http-api-token ${WATCHTOWER_TOKEN:-please-change-me}

@@ -392,6 +392,8 @@
       "namePlaceholder": "e.g. Huobao default image service",
       "provider": "Provider",
       "providerPlaceholder": "Select a provider",
+      "autoDLMarket": "AutoDL models and API tokens",
+      "autoDLImageHint": "Qwen-Image / Z-Image-Turbo support text-to-image only",
       "priority": "Priority",
       "priorityHint": "Higher wins. The workbench prefers the highest-priority active config of the same type.",
       "models": "Models",

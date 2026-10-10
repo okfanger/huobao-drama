@@ -392,6 +392,8 @@
       "namePlaceholder": "例：火宝デフォルト画像サービス",
       "provider": "プロバイダー",
       "providerPlaceholder": "プロバイダーを選択",
+      "autoDLMarket": "AutoDL モデルと API トークン",
+      "autoDLImageHint": "Qwen-Image / Z-Image-Turbo はテキストからの画像生成のみ対応",
       "priority": "優先度",
       "priorityHint": "数値が大きいほど優先。ワークベンチは同タイプの有効設定のうち優先度が最も高いものを使います。",
       "models": "モデル",

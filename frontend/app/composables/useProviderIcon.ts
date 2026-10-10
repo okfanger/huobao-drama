@@ -1,5 +1,5 @@
 /**
- * 厂商图标 — 双主题本地托管（app/public/icons/{light,dark}/，源自 chatfire-gateway）
+ * 厂商图标 — 双主题本地托管（app/public/icons/{light,dark}/）
  * resolvedTheme 是模块级 computed，模板中调用本函数会随主题切换响应式更新
  */
 import { resolvedTheme } from '~/composables/useTheme'
@@ -16,6 +16,7 @@ const FILENAMES: Record<string, string> = {
   moonshot: 'kimi-color.png',
   qwen: 'qwen-color.png',
   aliyun: 'qwen-color.png',  // 阿里云 Wan 系列与 Qwen 同属阿里，共用图标
+  autodl: 'autodl.png',  // 官网 https://www.autodl.art/favicon.png（两个主题均使用原图）
   zhipu: 'zhipu-color.png',
   xai: 'grok.png',
   xiaomi: 'xiaomi-color.png',

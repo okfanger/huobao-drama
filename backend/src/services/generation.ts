@@ -356,6 +356,8 @@ async function failTask(id: number, message: string) {
 type SysTaskRecord = typeof schema.sysTask.$inferSelect
 
 async function pollTask(record: SysTaskRecord, config: AIConfig, taskId: string) {
+  // Gateway providers route polling by the task's chosen model, which may override the config default.
+  config = { ...config, model: record.model || config.model }
   const type = record.type as TaskType
   const label = taskLabel(type)
   const profile = POLL_PROFILES[type]

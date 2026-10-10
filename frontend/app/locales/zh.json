@@ -392,6 +392,8 @@
       "namePlaceholder": "如 火宝默认图像服务",
       "provider": "服务商",
       "providerPlaceholder": "选择服务商",
+      "autoDLMarket": "AutoDL 模型广场与令牌管理",
+      "autoDLImageHint": "Qwen-Image / Z-Image-Turbo 仅支持文生图",
       "priority": "优先级",
       "priorityHint": "数值越高越优先。工作台默认会优先使用同类型里优先级最高的启用配置。",
       "models": "模型",

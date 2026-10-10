@@ -2,25 +2,41 @@
 
 # ===== 前端构建：Nuxt generate 产出静态站点 =====
 FROM node:22-bookworm-slim AS frontend-build
+# npm 源可参数化（国内构建可传 --build-arg NPM_REGISTRY=https://registry.npmmirror.com 直连加速）
+ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 # lockfile 的 resolved 可能指向带鉴权的私有 registry（开发者本机 .npmrc），镜像内会 401。
 # 构建期删除 resolved 字段（integrity 校验不受影响），让 npm 统一走公共 registry
 RUN node -e "const fs=require('fs');const l=JSON.parse(fs.readFileSync('package-lock.json'));for(const p of Object.values(l.packages||{}))delete p.resolved;fs.writeFileSync('package-lock.json',JSON.stringify(l,null,2))" \
-  && npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+  && npm ci --no-audit --no-fund --registry=${NPM_REGISTRY}
 COPY frontend/ ./
 RUN npm run generate
 
 # ===== 后端构建：安装依赖（含原生模块编译） =====
 FROM node:22-bookworm AS backend-build
+ARG NPM_REGISTRY=https://registry.npmjs.org
+# 阶段级默认 registry（覆盖 prune/补装等全部 npm 请求）
+ARG npm_config_registry=
+# 安装期二进制下载镜像（国内构建可注入 npmmirror，默认空=走官方 GitHub）
+ARG npm_config_better_sqlite3_binary_host_mirror=
+ARG FFMPEG_BINARIES_URL=
+# node-gyp 编译所需的 Node 头文件下载源（默认空=官方 nodejs.org）
+ARG npm_config_disturl=
+# npm 网络韧性参数（弱网环境调大重试次数与超时）
+ARG npm_config_fetch_retries=
+ARG npm_config_fetch_retry_mintimeout=
+ARG npm_config_fetch_retry_maxtimeout=
+ARG npm_config_fetch_timeout=
+ARG npm_config_maxsockets=
 WORKDIR /build/backend
 COPY backend/package.json backend/package-lock.json ./
 RUN node -e "const fs=require('fs');const l=JSON.parse(fs.readFileSync('package-lock.json'));for(const p of Object.values(l.packages||{}))delete p.resolved;fs.writeFileSync('package-lock.json',JSON.stringify(l,null,2))" \
-  && npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+  && npm ci --no-audit --no-fund --registry=${NPM_REGISTRY}
 COPY backend/ ./
 # 运行时与既有服务器部署一致走 tsx（源码存在 bundler 风格无扩展名 import，tsc 产物 node 直跑不可行）；
 # tsx 是 devDependency，prune 后单独补装
-RUN npm prune --omit=dev && npm i tsx@^4.21.0 --no-save --no-audit --no-fund --registry=https://registry.npmjs.org
+RUN npm prune --omit=dev && npm i tsx@^4.21.0 --no-save --no-audit --no-fund --registry=${NPM_REGISTRY}
 
 # ===== 运行时 =====
 FROM node:22-bookworm-slim
@@ -38,7 +54,9 @@ ENV NODE_ENV=production \
 # ffprobe-static 不包含 Linux ARM64 二进制；两个架构统一使用系统媒体工具。
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && /usr/bin/ffmpeg -version \
+  && /usr/bin/ffprobe -version
 
 WORKDIR /app
 COPY --from=backend-build /build/backend/src ./backend/src

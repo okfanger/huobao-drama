@@ -44,7 +44,8 @@ export async function mergeEpisodeVideos(episodeId: number, dramaId: number, sto
   // 这里提前拦截并给出可操作的修复指引（路由层会作为 400 返回前端）
   const suite = await checkFfmpegSuite()
   if (!suite.ffmpeg || !suite.ffprobe) {
-    throw new Error('本机 ffmpeg 不可用，无法拼接视频（常见于 node_modules 跨平台拷贝或 ffmpeg-static 下载损坏）。请删除 node_modules 后在本机重新 npm install，或设置 FFMPEG_BIN 指向有效的 ffmpeg 可执行文件后重启服务')
+    const unavailable = [!suite.ffmpeg && 'ffmpeg', !suite.ffprobe && 'ffprobe'].filter(Boolean).join('、')
+    throw new Error(`视频工具不可用（${unavailable}），无法拼接视频。请设置 FFMPEG_BIN 和 FFPROBE_BIN 指向当前系统与架构可执行的二进制后重启服务；Docker 部署请重新构建镜像`)
   }
 
   // 校验视频文件真实存在:DB 里的 video_url 可能指向已被清理的文件,

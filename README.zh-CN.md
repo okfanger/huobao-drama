@@ -111,6 +111,7 @@ data/       — 生成资源文件与 SQLite 数据库
 
 > **数据库零安装**：内置 SQLite（单文件，随项目数据目录存放），无需安装任何数据库服务。
 > **FFmpeg 无需安装**：项目通过 `ffmpeg-static` / `ffprobe-static` npm 包内置二进制，开箱即用。
+> **Docker 部署**：镜像通过系统包安装 ffmpeg 和 ffprobe，并配置两者的路径，支持 Linux ARM64（`ffprobe-static` 未包含该架构）。更新此配置后需重新构建镜像：`docker compose up -d --build app`。
 
 ### ⚙️ 环境变量
 
@@ -124,7 +125,7 @@ data/       — 生成资源文件与 SQLite 数据库
 | `HUOBAO_DATA_DIR` | — | 桌面版由 Electron 主进程注入（userData 数据根） |
 | `WORKSPACE_PATH` | `backend/workspace` | Agent 技能/提示词目录（桌面版指向 userData 可写副本） |
 | `FRONTEND_DIST` | `frontend/dist` | 前端静态产物目录 |
-| `FFMPEG_BIN` / `FFPROBE_BIN` | npm 内置二进制 | 自定义 ffmpeg/ffprobe 可执行文件路径 |
+| `FFMPEG_BIN` / `FFPROBE_BIN` | npm 内置二进制；Docker 使用系统包 | 自定义 ffmpeg/ffprobe 可执行文件路径，拼接视频需要两者都可用 |
 | `PUBLIC_BASE_URL` | — | Seedance 引用本地参考资源时所需的公网地址（服务器部署用） |
 
 > **说明**：AI 服务的 API Key、Base URL 和模型参数全部在 Web 界面的「设置」页配置并入库，不在配置文件/环境变量中维护。
@@ -204,6 +205,8 @@ cd backend && npx tsx scripts/import-mysql-to-sqlite.ts
 3. 或使用「手动模板」按厂商逐个添加，支持连通性测试
 
 配置完成横幅自动消失，即可开始创建剧集生产。
+
+**AutoDL**：在「手动模板」中选择 AutoDL，填写 [AutoDL 令牌](https://www.autodl.art/large-model/market)，Base URL 默认是 `https://www.autodl.art/api/v1`。支持 OpenAI 兼容的文本模型、Qwen-Image / Z-Image-Turbo 文生图，以及 Seedance 2.0、Wan 3.0、MiniMax H3 视频生成。视频接口会按模型自动路由；图片服务暂不支持参考图。接口说明见 [AutoDL 文档](https://www.autodl.art/docs/)。
 
 ---
 

@@ -4,6 +4,7 @@ import { db, schema } from '../db/index.js'
 import { success, created, badRequest } from '../utils/response.js'
 import { generateImage, generateVideo } from '../services/generation.js'
 import { getActiveConfig, getConfigById } from '../services/ai.js'
+import { getAutoDLVideoProvider } from '../services/adapters/autodl.js'
 import { getDramaStylePrompt } from '../services/style-preset.js'
 import { logTaskError, logTaskPayload, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
 import { taskRunId } from '../services/ai-runs.js'
@@ -139,7 +140,10 @@ app.post('/', async (c) => {
       const effectiveConfig = configId
         ? (await getConfigById(configId)) ?? await getActiveConfig('video')
         : await getActiveConfig('video')
-      const validationError = validateVideoRequest(videoBody, effectiveConfig?.provider)
+      const provider = effectiveConfig?.provider === 'autodl'
+        ? getAutoDLVideoProvider(videoBody.model || effectiveConfig.model)
+        : effectiveConfig?.provider
+      const validationError = validateVideoRequest(videoBody, provider)
       if (validationError) return badRequest(c, validationError)
     }
 

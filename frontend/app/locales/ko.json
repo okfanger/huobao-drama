@@ -392,6 +392,8 @@
       "namePlaceholder": "예: 화바오 기본 이미지 서비스",
       "provider": "제공업체",
       "providerPlaceholder": "제공업체 선택",
+      "autoDLMarket": "AutoDL 모델 및 API 토큰",
+      "autoDLImageHint": "Qwen-Image / Z-Image-Turbo는 텍스트 기반 이미지 생성만 지원합니다",
       "priority": "우선순위",
       "priorityHint": "숫자가 클수록 우선입니다. 워크벤치는 같은 유형의 활성 설정 중 우선순위가 가장 높은 것을 사용합니다.",
       "models": "모델",

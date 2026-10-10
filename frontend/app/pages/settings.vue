@@ -521,6 +521,10 @@
           <label v-if="cfgForm.provider !== 'codex'" class="field"><span class="field-label">API Key</span><input v-model="cfgForm.api_key" class="input" type="password" placeholder="sk-..." /></label>
           <label v-if="cfgForm.provider !== 'codex'" class="field"><span class="field-label">Base URL</span><input v-model="cfgForm.base_url" class="input" placeholder="https://..." /></label>
           <p v-if="cfgForm.provider === 'codex'" class="field-hint">{{ t('codex.localHint') }}</p>
+          <p v-if="cfgForm.provider === 'autodl'" class="field-hint">
+            <a href="https://www.autodl.art/large-model/market" target="_blank" rel="noopener noreferrer">{{ t('settings.cfg.autoDLMarket') }}</a>
+            <span v-if="cfgForm.service_type === 'image'"> · {{ t('settings.cfg.autoDLImageHint') }}</span>
+          </p>
           <div class="field">
             <span class="field-label">{{ t('settings.cfg.models') }}</span>
             <div v-if="cfgForm.models.length" class="model-chips">
@@ -751,7 +755,7 @@ const serviceTypes = computed(() => [
   { type: 'image', label: t('common.serviceType.image') },
   { type: 'video', label: t('common.serviceType.video') },
 ])
-const providers = ['gemini', 'openai', 'volcengine', 'minimax', 'aliyun']
+const providers = ['gemini', 'openai', 'volcengine', 'minimax', 'aliyun', 'autodl']
 const providerSelectOptions = computed(() => [...providers, ...(cfgForm.service_type === 'text' ? ['codex'] : [])].map(p => ({ label: p, value: p })))
 const serviceMeta = computed(() => ({
   text: { label: t('common.serviceType.text'), desc: t('settings.ai.meta.text') },
@@ -759,21 +763,27 @@ const serviceMeta = computed(() => ({
   video: { label: t('common.serviceType.video'), desc: t('settings.ai.meta.video') },
 }))
 watch(() => cfgForm.provider, provider => { if (provider === 'codex') { cfgForm.api_key = ''; cfgForm.base_url = ''; cfgForm.temperature = ''; if (!cfgForm.models.length) cfgForm.models = ['default'] } })
-function onProviderChange(provider) { if (provider === 'codex') cfgForm.models = ['default'] }
+function onProviderChange(provider) {
+  if (provider === 'codex') cfgForm.models = ['default']
+  if (provider === 'autodl') applyProviderPreset(cfgForm.service_type, provider)
+}
 const providerPresets = {
   text: {
     gemini: { label: 'Gemini 官方', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview'] },
     openai: { label: 'OpenAI 官方', baseUrl: 'https://api.openai.com', models: ['deepseek-v4-pro', 'gpt-5.6-terra'] },
     codex: { label: 'Codex (ChatGPT)', baseUrl: '', models: ['default'] },
+    autodl: { label: 'AutoDL', baseUrl: 'https://www.autodl.art/api/v1', models: ['DeepSeek-V4.1-Flash', 'DeepSeek-V4-Pro', 'GLM-5.3', 'Kimi-K2.5', 'qwen3.6-plus'] },
   },
   image: {
     gemini: { label: 'Gemini 官方', baseUrl: 'https://generativelanguage.googleapis.com', models: ['gemini-3-pro-image', 'gemini-3.1-flash-image'] },
     openai: { label: 'OpenAI 官方', baseUrl: 'https://api.openai.com', models: ['gpt-image-2'] },
+    autodl: { label: 'AutoDL', baseUrl: 'https://www.autodl.art/api/v1', models: ['Qwen-Image', 'Z-Image-Turbo'] },
   },
   video: {
     aliyun: { label: '阿里云百炼 Wan 3.0', baseUrl: 'https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com', models: ['wan3.0-video', 'wan3.0-video-prime'] },
     volcengine: { label: 'Seedance 2.0 官方', baseUrl: 'https://ark.cn-beijing.volces.com', models: ['doubao-seedance-2-0-mini-260615', 'doubao-seedance-2-0-fast-260128', 'doubao-seedance-2-0-260128'] },
     minimax: { label: 'MiniMax H3 官方', baseUrl: 'https://api.minimaxi.com', models: ['MiniMax-H3'] },
+    autodl: { label: 'AutoDL', baseUrl: 'https://www.autodl.art/api/v1', models: ['doubao-seedance-2-0-mini-260615', 'doubao-seedance-2-0-fast-260128', 'doubao-seedance-2-0-260128', 'wan3.0-video', 'wan3.0-video-prime', 'MiniMax-H3'] },
   },
 }
 const huobaoQuickConfigs = computed(() => {
@@ -1628,6 +1638,8 @@ onBeforeUnmount(stopUsagePoll)
 /* 有厂商图标时用中性底，彩色图标直接展示 */
 .provider-badge.has-icon { background: var(--bg-2); }
 .provider-badge-icon { width: 20px; height: 20px; object-fit: contain; }
+.provider-badge.has-icon[data-provider="autodl"] { background: transparent; box-shadow: none; }
+.provider-badge[data-provider="autodl"] .provider-badge-icon { width: 32px; height: 32px; }
 .config-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .config-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .config-name { font-size: 13.5px; font-weight: 650; color: var(--text-0); }

@@ -4,6 +4,7 @@ import { db, getInsertId, schema } from '../db/index.js'
 import { success, notFound, created, badRequest, now } from '../utils/response.js'
 import { toSnakeCase } from '../utils/transform.js'
 import { joinProviderUrl } from '../services/adapters/url.js'
+import { getAutoDLBaseUrl } from '../services/adapters/autodl.js'
 import { isOfficialProvider, parseConfigTemperature } from '../services/ai.js'
 import { redactUrl, logTaskError, logTaskProgress, logTaskSuccess } from '../utils/task-logger.js'
 import { codexStatus } from '../services/codex-status.js'
@@ -47,6 +48,15 @@ function geminiHeaders(apiKey?: string, withJson = false) {
 function buildProbe(serviceType: string, provider: string, baseUrl: string, model?: string, apiKey?: string) {
   const p = provider.toLowerCase()
   const m = model || ''
+
+  if (p === 'autodl') {
+    return {
+      method: 'GET',
+      url: joinProviderUrl(getAutoDLBaseUrl(baseUrl), '', '/models'),
+      headers: bearerHeaders(apiKey),
+      body: undefined,
+    }
+  }
 
   if (p === 'gemini') {
     // 探针统一走 generateContent:文本运行时(AI SDK)走的就是它,官方与中转站都支持;
